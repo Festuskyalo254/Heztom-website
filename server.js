@@ -11,16 +11,22 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(__dirname));
 
-// POST endpoint for contact form
-app.post('/send-email', async (req, res) => {
-    console.log('POST /send-email called');
-    console.log('Request body:', req.body);
-    const { name, email, subject, message } = req.body;
+const sendEmail = async (req, res) => {
+    const { name, email, subject, message } = req.body || {};
+
+    if (!name || !email || !subject || !message) {
+        return res.status(400).json({ success: false, error: 'Please fill in all fields.' });
+    }
+
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+        console.error('Missing EMAIL_USER or EMAIL_PASS environment variables.');
+        return res.status(500).json({ success: false, error: 'Email service is not configured yet.' });
+    }
 
     const transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
+        host: 'smtp.gmail.com',
         port: 465,
-        secure: true, // true for SSL
+        secure: true,
         auth: {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PASS,
@@ -29,26 +35,34 @@ app.post('/send-email', async (req, res) => {
 
     const mailOptions = {
         from: process.env.EMAIL_USER,
-        to: process.env.EMAIL_USER, // or any recipient email
-        subject: `New message from ${name}`,
-        html: `<p><strong>Name:</strong> ${name}</p>
-               <p><strong>Email:</strong> ${email}</p>
-               <p><strong>Message:</strong><br>${message}</p>`,
+        to: process.env.EMAIL_USER,
+        subject: `New message from ${name}: ${subject}`,
+        html: `
+            <p><strong>Name:</strong> ${name}</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Subject:</strong> ${subject}</p>
+            <p><strong>Message:</strong><br>${message}</p>
+        `,
     };
 
     try {
-        console.log('Attempting to send email...');
         await transporter.sendMail(mailOptions);
-        res.status(200).json({ success: true });
+        return res.status(200).json({ success: true });
     } catch (error) {
         console.error('Error sending email:', error);
-        res.status(500).json({ success: false, error: error.message });
+        return res.status(500).json({ success: false, error: error.message });
     }
+};
+
+app.post('/api/send-email', sendEmail);
+app.post('/send-email', sendEmail);
+
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index.html');
 });
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    console.log('EMAIL_USER:', process.env.EMAIL_USER ? 'Loaded' : 'Not loaded');
+    console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? 'Loaded' : 'Not loaded');
 });
-
-console.log('EMAIL_USER:', process.env.EMAIL_USER);
-console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? 'Loaded' : 'Not loaded');
